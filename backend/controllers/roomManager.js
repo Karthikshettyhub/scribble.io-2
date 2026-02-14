@@ -7,7 +7,7 @@ const createRoom = (roomId, player) => {
 
     rooms[roomId] = {
         id: roomId,
-        players:[player],
+        players: [player],
         gameStarted: false,
         currentDrawer: null,
         word: null
@@ -45,8 +45,13 @@ const leaveRoom = (roomId,socketId) => {
 
 };
 
+const getRoom = (roomId) => {
+    return rooms[roomId];
+};
+
 module.exports = {
     createRoom,
     joinRoom,
-    leaveRoom
+    leaveRoom,
+    getRoom
 }
