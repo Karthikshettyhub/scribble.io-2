@@ -1,4 +1,5 @@
 const { createRoom,joinRoom,leaveRoom,getRoom } = require('../controllers/roomManager');
+const { startGame } = require('../controllers/gameManager');
 
 
 const socketManager =(io) => {
@@ -95,7 +96,32 @@ const socketManager =(io) => {
             console.log("User disconnected:", socket.id);
         });
 
-        
+        socket.on('start-game',() => {
+            
+            const roomId = userRoomMap[socket.id];
+
+            if(!roomId){
+                return socket.emit('error',{message: 'You are not in a room'});
+            }
+
+            const result = startGame(roomId);
+
+            if(!result.success){
+                return socket.emit('error',{message: result.error});
+            }
+
+            const room = result.room;
+
+            io.to(roomId).emit('game-started',{
+                drawer: room.currentdrawer,
+                players: room.players
+            });
+
+            io.to(room.currentDrawer).emit('your-word',{
+                word:room.word
+            });
+            
+        })
     });
 };
 
