@@ -26,12 +26,12 @@ const getRandomDrawer = (players) => {
 const startGame = (roomId) => {
     const room = getRoom(roomId);
 
-    if(!room){
-        return {success:false, error: 'Room not found' };
+    if (!room) {
+        return { success: false, error: 'Room not found' };
     }
 
-    if(room.players.length < 2){
-        return {success:false, error: 'Not enough players to start the game' };
+    if (room.players.length < 2) {
+        return { success: false, error: 'Not enough players to start the game' };
     }
     const drawer = getRandomDrawer(room.players);
     const word = getRandomWord();
@@ -39,10 +39,59 @@ const startGame = (roomId) => {
     room.currentDrawer = drawer.socketId;
     room.word = word;
 
-    return { success:true,room };
+    return { success: true, room };
 
+};
+
+const handleGuess = (roomId, socketId, guess) => {
+    const room = getRoom(roomId);
+    
+    if (!room) {
+        return { success: false, error: 'room not found' };
+    }
+    
+    if (!room.gameStarted) {
+        return { success: false, error: 'game not started' };
+    }
+    
+    if (room.currentDrawer === socketId) {
+        return { success: false, error: 'drawer cannot guess' };
+    }
+    
+    const normalizedGuess = guess.trim().toLowerCase();
+    const normalizedWord = room.word.trim().toLowerCase();
+    
+    if (normalizedGuess === normalizedWord) {
+        const player = room.players.find(p => {
+            if (p.socketId === socketId) {
+                return p;
+            }
+        });
+        
+       
+        if (!player) {
+            return { success: false, error: 'player not found in room' };
+        }
+        
+        player.score = player.score + 10;
+        room.gameStarted = false;
+        
+        return {
+            success: true,
+            correct: true,
+            winner: socketId,
+            word: room.word,
+            players: room.players
+        };
+    }
+    
+    return {
+        success: true,
+        correct: false
+    };
 };
 
 module.exports = {
     startGame,
+    handleGuess
 };
