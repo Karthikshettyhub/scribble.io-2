@@ -10,7 +10,10 @@ const createRoom = (roomId, player) => {
         players: [player],
         gameStarted: false,
         currentDrawer: null,
-        word: null
+        word: null,
+        round: 0,
+        totalRounds: 3,  // total rounds per game
+        drawerIndex: 0
     };
 
     return { success:true,room: rooms[roomId] };

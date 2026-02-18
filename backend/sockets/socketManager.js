@@ -1,24 +1,27 @@
 const { createRoom, joinRoom, leaveRoom, getRoom } = require('../controllers/roomManager');
 const { startGame, handleGuess } = require('../controllers/gameManager');
 
-
 const socketManager = (io) => {
+
     const userRoomMap = {};
     const roomTimers = {};
+    const countdownIntervals = {};
 
     io.on('connection', (socket) => {
 
-        console.log("user connected: ", socket.id);
+        console.log("User connected:", socket.id);
 
-
+        // =========================
         // CREATE ROOM
+        // =========================
         socket.on('create-room', ({ roomId, username }) => {
 
             const player = {
                 socketId: socket.id,
                 username,
                 score: 0
-            }
+            };
+
             const result = createRoom(roomId, player);
 
             if (!result.success) {
@@ -31,14 +34,13 @@ const socketManager = (io) => {
             socket.emit('room-created', result.room);
         });
 
-
-        // JOIN ROOM
         socket.on('join-room', ({ roomId, username }) => {
+
             const player = {
                 socketId: socket.id,
                 username,
                 score: 0
-            }
+            };
 
             const result = joinRoom(roomId, player);
 
@@ -50,33 +52,25 @@ const socketManager = (io) => {
             userRoomMap[socket.id] = roomId;
 
             io.to(roomId).emit('room-updated', result.room);
-
         });
 
 
-        // LEAVE ROOM
         socket.on('leave-room', () => {
-            const roomId = userRoomMap[socket.id];
 
-            if (!roomId) {
-                return;
-            }
+            const roomId = userRoomMap[socket.id];
+            if (!roomId) return;
 
             leaveRoom(roomId, socket.id);
             socket.leave(roomId);
 
-            const updateRoom = getRoom(roomId);
-
-            if (updateRoom) {
-                io.to(roomId).emit('room-updated', updateRoom);
+            const updatedRoom = getRoom(roomId);
+            if (updatedRoom) {
+                io.to(roomId).emit('room-updated', updatedRoom);
             }
 
             delete userRoomMap[socket.id];
-
         });
 
-
-        // DISCONNECT
         socket.on('disconnect', () => {
 
             const roomId = userRoomMap[socket.id];
@@ -85,7 +79,6 @@ const socketManager = (io) => {
                 leaveRoom(roomId, socket.id);
 
                 const updatedRoom = getRoom(roomId);
-
                 if (updatedRoom) {
                     io.to(roomId).emit('room-updated', updatedRoom);
                 }
@@ -97,17 +90,14 @@ const socketManager = (io) => {
         });
 
 
-        // START GAME
         socket.on('start-game', () => {
 
             const roomId = userRoomMap[socket.id];
-
             if (!roomId) {
                 return socket.emit('error', { message: 'You are not in a room' });
             }
 
             const result = startGame(roomId);
-
             if (!result.success) {
                 return socket.emit('error', { message: result.error });
             }
@@ -123,51 +113,71 @@ const socketManager = (io) => {
                 word: room.word
             });
 
-            // Clear previous timer if exists
             if (roomTimers[roomId]) {
                 clearTimeout(roomTimers[roomId]);
             }
+            if (countdownIntervals[roomId]) {
+                clearInterval(countdownIntervals[roomId]);
+            }
 
-            // 60-second round timer
-            let timeLeft = 60; 
+            let timeLeft = 60;
 
-            // Emit countdown every second
-            const countdownInterval = setInterval(() => {
+            countdownIntervals[roomId] = setInterval(() => {
                 timeLeft--;
                 io.to(roomId).emit('timer', { timeLeft });
 
                 if (timeLeft <= 0) {
-                    clearInterval(countdownInterval);
+                    clearInterval(countdownIntervals[roomId]);
                 }
             }, 1000);
 
             roomTimers[roomId] = setTimeout(() => {
-                // Time's up → end round
-                const room = getRoom(roomId);
 
-                if (room && room.gameStarted) {
-                    room.gameStarted = false;
+                const currentRoom = getRoom(roomId);
+                if (!currentRoom || !currentRoom.gameStarted) return;
 
-                    io.to(roomId).emit('round-ended', {
-                        winner: null,
-                        word: room.word,
-                        players: room.players
-                    });
-                }
+                currentRoom.gameStarted = false;
 
-                clearInterval(countdownInterval);
+                io.to(roomId).emit('round-ended', {
+                    winner: null,
+                    word: currentRoom.word,
+                    players: currentRoom.players
+                });
+
+                clearInterval(countdownIntervals[roomId]);
+                delete countdownIntervals[roomId];
                 delete roomTimers[roomId];
 
-            }, 60000); // 60 seconds
+                setTimeout(() => {
 
-        })
+                    const next = startGame(roomId);
+
+                    if (!next.success) {
+                        return io.to(roomId).emit('game-over', {
+                            players: getRoom(roomId)?.players || []
+                        });
+                    }
+
+                    const newRoom = next.room;
+
+                    io.to(roomId).emit('game-started', {
+                        drawer: newRoom.currentDrawer,
+                        players: newRoom.players
+                    });
+
+                    io.to(newRoom.currentDrawer).emit('your-word', {
+                        word: newRoom.word
+                    });
+
+                }, 3000);
+
+            }, 60000);
+        });
 
 
-        // GUESS
         socket.on('guess', ({ guess }) => {
 
             const roomId = userRoomMap[socket.id];
-
             if (!roomId) {
                 return socket.emit('error', { message: "Not in room" });
             }
@@ -178,7 +188,7 @@ const socketManager = (io) => {
                 return socket.emit('error', { message: result.error });
             }
 
-            // Wrong guess → broadcast as chat
+
             if (!result.correct) {
                 return io.to(roomId).emit('chat-message', {
                     user: socket.id,
@@ -186,7 +196,7 @@ const socketManager = (io) => {
                 });
             }
 
-            // Correct guess → end round
+
             io.to(roomId).emit('round-ended', {
                 winner: result.winner,
                 word: result.word,
@@ -198,9 +208,13 @@ const socketManager = (io) => {
                 delete roomTimers[roomId];
             }
 
+            if (countdownIntervals[roomId]) {
+                clearInterval(countdownIntervals[roomId]);
+                delete countdownIntervals[roomId];
+            }
         });
 
-    });
+    }); // end connection
 };
 
 module.exports = socketManager;

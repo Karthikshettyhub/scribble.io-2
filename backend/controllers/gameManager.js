@@ -90,8 +90,40 @@ const handleGuess = (roomId, socketId, guess) => {
         correct: false
     };
 };
+const startNextRound = (roomId) => {
+    const room = getRoom(roomId);
+    if (!room) return { success: false, error: 'Room not found' };
+
+    room.round += 1;
+
+    if (room.round > room.totalRounds) {
+        // Game over
+        room.gameStarted = false;
+        return { success: true, gameOver: true, room };
+    }
+
+    // Pick next drawer
+    const drawer = rotateDrawer(room);
+    const word = getRandomWord();
+    room.word = word;
+    room.gameStarted = true;
+
+    return { success: true, gameOver: false, room };
+};
+
+
+
+
+const randomDrawer = (roomId) => {
+    room.drawerIndex = (room.drawerIndex + 1) % room.players.length;
+    const drawer = room.players[room.drawerIndex];
+    room.currentDrawer = drawer.socketId;
+    return drawer;
+};
 
 module.exports = {
     startGame,
-    handleGuess
+    handleGuess,
+    randomDrawer,
+    startNextRound
 };
