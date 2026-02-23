@@ -97,22 +97,44 @@ const socketManager = (io) => {
                 return socket.emit('error', { message: 'You are not in a room' });
             }
 
+            const room = getRoom(roomId);
+
+            if (!room) {
+                return socket.emit('error', { message: 'Room not found' });
+            }
+
+            // ✅ Minimum 2 players required
+            if (room.players.length < 2) {
+                return socket.emit('error', {
+                    message: 'Need at least 2 players to start'
+                });
+            }
+
+            // ✅ Host-only start
+            if (room.host !== socket.id) {
+                return socket.emit('error', {
+                    message: 'Only host can start the game'
+                });
+            }
+
+            // Now safe to start game
             const result = startNextRound(roomId);
             if (!result.success) {
                 return socket.emit('error', { message: result.error });
             }
 
-            const room = result.room;
+            const updatedRoom = result.room;
 
             io.to(roomId).emit('game-started', {
-                drawer: room.currentDrawer,
-                players: room.players
+                drawer: updatedRoom.currentDrawer,
+                players: updatedRoom.players
             });
 
-            io.to(room.currentDrawer).emit('your-word', {
-                word: room.word
+            io.to(updatedRoom.currentDrawer).emit('your-word', {
+                word: updatedRoom.word
             });
 
+            // Clear old timers if exist
             if (roomTimers[roomId]) {
                 clearTimeout(roomTimers[roomId]);
             }
@@ -136,13 +158,11 @@ const socketManager = (io) => {
                 const currentRoom = getRoom(roomId);
                 if (!currentRoom || !currentRoom.gameStarted) return;
 
-                // If everyone already guessed, do nothing
                 const totalGuessers = currentRoom.players.length - 1;
 
                 if (currentRoom.guessedPlayers.length === totalGuessers) {
-                    return; 
+                    return;
                 }
-                
 
                 currentRoom.gameStarted = false;
 

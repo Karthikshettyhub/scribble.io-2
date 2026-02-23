@@ -93,31 +93,49 @@ const startNextRound = (roomId) => {
         return { success: false, error: 'Not enough players' };
     }
 
+    // First time starting game
     if (!room.gameStarted) {
         room.gameStarted = true;
         room.round = 1;
         room.drawerIndex = 0;
+
+        
+        room.players.forEach(player => {
+            player.score = 0;
+        });
+
     } else {
+        // Move to next drawer
         room.drawerIndex++;
 
+        // If all players have drawn → new round
         if (room.drawerIndex >= room.players.length) {
             room.drawerIndex = 0;
             room.round++;
         }
     }
 
+    // Stop if max rounds reached
     if (room.round > room.totalRounds) {
         room.gameStarted = false;
-        return { success: true, gameOver: true, room };
+
+        return {
+            success: true,
+            gameOver: true,
+            room
+        };
     }
 
     const drawer = room.players[room.drawerIndex];
     room.currentDrawer = drawer.socketId;
     room.word = getRandomWord();
-
     room.guessedPlayers = [];
 
-    return { success: true, gameOver: false, room };
+    return {
+        success: true,
+        gameOver: false,
+        room
+    };
 };
 
 

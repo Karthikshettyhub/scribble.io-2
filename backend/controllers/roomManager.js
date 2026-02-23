@@ -7,6 +7,7 @@ const createRoom = (roomId, player) => {
 
     rooms[roomId] = {
         id: roomId,
+        host: player.socketId,
         players: [player],
         gameStarted: false,
         currentDrawer: null,
