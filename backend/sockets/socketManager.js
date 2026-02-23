@@ -1,5 +1,5 @@
 const { createRoom, joinRoom, leaveRoom, getRoom } = require('../controllers/roomManager');
-const { startGame, handleGuess } = require('../controllers/gameManager');
+const { startNextRound, handleGuess } = require('../controllers/gameManager');
 
 const socketManager = (io) => {
 
@@ -97,7 +97,7 @@ const socketManager = (io) => {
                 return socket.emit('error', { message: 'You are not in a room' });
             }
 
-            const result = startGame(roomId);
+            const result = startNextRound(roomId);
             if (!result.success) {
                 return socket.emit('error', { message: result.error });
             }
@@ -136,6 +136,14 @@ const socketManager = (io) => {
                 const currentRoom = getRoom(roomId);
                 if (!currentRoom || !currentRoom.gameStarted) return;
 
+                // If everyone already guessed, do nothing
+                const totalGuessers = currentRoom.players.length - 1;
+
+                if (currentRoom.guessedPlayers.length === totalGuessers) {
+                    return; 
+                }
+                
+
                 currentRoom.gameStarted = false;
 
                 io.to(roomId).emit('round-ended', {
@@ -150,7 +158,7 @@ const socketManager = (io) => {
 
                 setTimeout(() => {
 
-                    const next = startGame(roomId);
+                    const next = startNextRound(roomId);
 
                     if (!next.success) {
                         return io.to(roomId).emit('game-over', {
@@ -188,7 +196,7 @@ const socketManager = (io) => {
                 return socket.emit('error', { message: result.error });
             }
 
-
+            // Wrong guess → normal chat
             if (!result.correct) {
                 return io.to(roomId).emit('chat-message', {
                     user: socket.id,
@@ -196,13 +204,20 @@ const socketManager = (io) => {
                 });
             }
 
+            // Correct guess but round NOT complete
+            if (!result.roundComplete) {
+                return io.to(roomId).emit('player-guessed', {
+                    players: result.players
+                });
+            }
 
+            // If ALL players guessed → end round
             io.to(roomId).emit('round-ended', {
-                winner: result.winner,
                 word: result.word,
                 players: result.players
             });
 
+            // Clear timers
             if (roomTimers[roomId]) {
                 clearTimeout(roomTimers[roomId]);
                 delete roomTimers[roomId];
@@ -212,6 +227,31 @@ const socketManager = (io) => {
                 clearInterval(countdownIntervals[roomId]);
                 delete countdownIntervals[roomId];
             }
+
+            // Start next round after 3 seconds
+            setTimeout(() => {
+
+                const next = startNextRound(roomId);
+
+                if (!next.success || next.gameOver) {
+                    return io.to(roomId).emit('game-over', {
+                        players: next.room?.players || []
+                    });
+                }
+
+                const room = next.room;
+
+                io.to(roomId).emit('game-started', {
+                    drawer: room.currentDrawer,
+                    players: room.players,
+                    round: room.round
+                });
+
+                io.to(room.currentDrawer).emit('your-word', {
+                    word: room.word
+                });
+
+            }, 3000);
         });
 
     }); // end connection

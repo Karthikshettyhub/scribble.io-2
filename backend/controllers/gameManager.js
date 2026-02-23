@@ -18,73 +18,65 @@ const getRandomWord = () => {
     return words[index];
 }
 
-const getRandomDrawer = (players) => {
-    const index = Math.floor(Math.random() * players.length);
-    return players[index];
-}
 
-const startGame = (roomId) => {
+const handleGuess = (roomId, socketId, guess) => {
     const room = getRoom(roomId);
 
     if (!room) {
         return { success: false, error: 'Room not found' };
     }
 
-    if (room.players.length < 2) {
-        return { success: false, error: 'Not enough players to start the game' };
-    }
-    const drawer = getRandomDrawer(room.players);
-    const word = getRandomWord();
-    room.gameStarted = true;
-    room.currentDrawer = drawer.socketId;
-    room.word = word;
-
-    return { success: true, room };
-
-};
-
-const handleGuess = (roomId, socketId, guess) => {
-    const room = getRoom(roomId);
-    
-    if (!room) {
-        return { success: false, error: 'room not found' };
-    }
-    
     if (!room.gameStarted) {
-        return { success: false, error: 'game not started' };
+        return { success: false, error: 'Game not started' };
     }
-    
+
     if (room.currentDrawer === socketId) {
-        return { success: false, error: 'drawer cannot guess' };
+        return { success: false, error: 'Drawer cannot guess' };
     }
-    
+
     const normalizedGuess = guess.trim().toLowerCase();
     const normalizedWord = room.word.trim().toLowerCase();
-    
+
     if (normalizedGuess === normalizedWord) {
-        const player = room.players.find(p => {
-            if (p.socketId === socketId) {
-                return p;
-            }
-        });
-        
-       
+
+        const player = room.players.find(p => p.socketId === socketId);
+
         if (!player) {
-            return { success: false, error: 'player not found in room' };
+            return { success: false, error: 'Player not found in room' };
         }
-        
-        player.score = player.score + 10;
-        room.gameStarted = false;
-        
+
+        // prevent double scoring
+        if (room.guessedPlayers.includes(socketId)) {
+            return { success: false, error: 'Already guessed correctly' };
+        }
+
+        const points = 10 - (room.guessedPlayers.length * 2);
+        player.score += Math.max(points, 5);
+        room.guessedPlayers.push(socketId);
+
+        const totalGuessers = room.players.length - 1; // exclude drawer
+        const allGuessed = room.guessedPlayers.length === totalGuessers;
+
+        if (allGuessed) {
+            room.gameStarted = false;
+
+            return {
+                success: true,
+                correct: true,
+                roundComplete: true,
+                word: room.word,
+                players: room.players
+            };
+        }
+
         return {
             success: true,
             correct: true,
-            winner: socketId,
-            word: room.word,
+            roundComplete: false,
             players: room.players
         };
     }
-    
+
     return {
         success: true,
         correct: false
@@ -92,38 +84,44 @@ const handleGuess = (roomId, socketId, guess) => {
 };
 const startNextRound = (roomId) => {
     const room = getRoom(roomId);
-    if (!room) return { success: false, error: 'Room not found' };
 
-    room.round += 1;
+    if (!room) {
+        return { success: false, error: 'Room not found' };
+    }
+
+    if (room.players.length < 2) {
+        return { success: false, error: 'Not enough players' };
+    }
+
+    if (!room.gameStarted) {
+        room.gameStarted = true;
+        room.round = 1;
+        room.drawerIndex = 0;
+    } else {
+        room.drawerIndex++;
+
+        if (room.drawerIndex >= room.players.length) {
+            room.drawerIndex = 0;
+            room.round++;
+        }
+    }
 
     if (room.round > room.totalRounds) {
-        // Game over
         room.gameStarted = false;
         return { success: true, gameOver: true, room };
     }
 
-    // Pick next drawer
-    const drawer = rotateDrawer(room);
-    const word = getRandomWord();
-    room.word = word;
-    room.gameStarted = true;
+    const drawer = room.players[room.drawerIndex];
+    room.currentDrawer = drawer.socketId;
+    room.word = getRandomWord();
+
+    room.guessedPlayers = [];
 
     return { success: true, gameOver: false, room };
 };
 
 
-
-
-const randomDrawer = (roomId) => {
-    room.drawerIndex = (room.drawerIndex + 1) % room.players.length;
-    const drawer = room.players[room.drawerIndex];
-    room.currentDrawer = drawer.socketId;
-    return drawer;
-};
-
 module.exports = {
-    startGame,
     handleGuess,
-    randomDrawer,
     startNextRound
 };
