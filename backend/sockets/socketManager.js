@@ -202,6 +202,11 @@ const socketManager = (io) => {
             }, 60000);
         });
 
+        socket.on('get-room', ({ roomId }) => {
+            const room = getRoom(roomId);
+            if (room) socket.emit('room-updated', room);
+            else socket.emit('error', { message: 'Room not found' });
+        });
 
         socket.on('guess', ({ guess }) => {
 
