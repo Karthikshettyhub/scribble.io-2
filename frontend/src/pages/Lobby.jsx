@@ -24,7 +24,7 @@ function Lobby() {
     });
 
     socket.on("game-started", ({ drawer, players }) => {
-      navigate(`/game/${roomId}`, { state: { username } });
+      navigate(`/game/${roomId}`, { state: { username, drawer, players } }); // ✅ pass drawer and players
     });
 
     socket.on("error", ({ message }) => {
@@ -60,7 +60,6 @@ function Lobby() {
           </li>
         ))}
       </ul>
-
       {socket.id === room.host && (
         <button onClick={handleStartGame}>Start Game</button>
       )}

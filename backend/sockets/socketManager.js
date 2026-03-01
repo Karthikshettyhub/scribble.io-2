@@ -70,7 +70,14 @@ const socketManager = (io) => {
 
             delete userRoomMap[socket.id];
         });
+        socket.on("draw", ({ roomId, x, y, px, py, color, brushSize, tool }) => {
+            socket.to(roomId).emit("draw", { x, y, px, py, color, brushSize, tool });
+        });
 
+        socket.on("clear-canvas", ({ roomId }) => {
+            socket.to(roomId).emit("clear-canvas");
+        });
+        
         socket.on('disconnect', () => {
 
             const roomId = userRoomMap[socket.id];
